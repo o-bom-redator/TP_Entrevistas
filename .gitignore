@@ -1,0 +1,7 @@
+# Your personal data stays local
+profile.md
+answers.md
+
+__pycache__/
+.DS_Store
+.claude/

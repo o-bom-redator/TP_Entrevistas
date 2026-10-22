@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Teleprompter</title>
+<style>
+  :root { --bg:#111; --panel:#1b1b1b; --text:#f2f2f2; --muted:#888; --accent:#ffd54a; --line:#2c2c2c; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-system,system-ui,sans-serif; height:100vh; display:flex; flex-direction:column; }
+  header { display:flex; gap:8px; padding:10px 14px; border-bottom:1px solid var(--line); align-items:center; flex-wrap:wrap; }
+  #search { flex:1; min-width:180px; font-size:18px; padding:10px 12px; border-radius:8px; border:1px solid var(--line); background:var(--panel); color:var(--text); }
+  select { font-size:15px; padding:9px; border-radius:8px; border:1px solid var(--line); background:var(--panel); color:var(--text); }
+  button { font-size:15px; padding:9px 12px; border-radius:8px; border:1px solid var(--line); background:var(--panel); color:var(--text); cursor:pointer; }
+  button.on { background:var(--accent); color:#111; }
+  #list { display:flex; gap:6px; padding:8px 14px; overflow-x:auto; border-bottom:1px solid var(--line); }
+  #list button { white-space:nowrap; font-size:13px; }
+  #list button.active { border-color:var(--accent); color:var(--accent); }
+  #stage { flex:1; overflow-y:auto; padding:24px 6vw 60vh; scroll-behavior:auto; }
+  #q { color:var(--muted); font-size:20px; margin:0 0 18px; }
+  #a p { font-size:var(--fs,34px); line-height:1.5; margin:0 0 .7em; }
+  #a b { color:var(--accent); font-weight:600; }
+  .hint { color:var(--muted); font-size:12px; }
+
+  /* Compact mode: narrow column under the webcam. The text starts at the very top edge
+     (closest to the camera); the controls move to the bottom and show only on hover. */
+  body.compact #list, body.compact .hint, body.compact #model, body.compact #q { display:none; }
+  body.compact header { position:fixed; bottom:0; left:0; right:0; z-index:2; background:var(--bg);
+    padding:4px 8px; gap:4px; border:0; border-top:1px solid var(--line); opacity:0; transition:opacity .15s; }
+  body.compact header:hover, body.compact header:focus-within { opacity:1; }
+  body.compact header input, body.compact header button { font-size:12px; padding:4px 7px; }
+  body.compact #search { min-width:120px; }
+  body.compact #stage { padding:2px 12px 90vh;
+    -webkit-mask-image:linear-gradient(to bottom, #000 0, #000 45%, rgba(0,0,0,.12) 80%);
+            mask-image:linear-gradient(to bottom, #000 0, #000 45%, rgba(0,0,0,.12) 80%); }
+  body.compact #a p:first-child { margin-top:0; }
+  body.compact #a { line-height:1.3; }
+  body.compact #a p { max-width:15em; margin:0 auto .55em; text-align:center; }
+</style>
+</head>
+<body>
+<header>
+  <input id="search" placeholder="Cmd+V a screenshot · or paste question + Enter · or 1-2 words = ready answer" autofocus>
+  <select id="model" title="Model"><option value="sonnet">Sonnet (better)</option><option value="haiku">Haiku (fast)</option></select>
+  <button id="smaller">A−</button><button id="bigger">A+</button>
+  <button id="scroll">▶ Scroll</button>
+  <button id="slower">−</button><button id="faster">+</button>
+  <button id="compactBtn" title="Compact mode (C)">▭ Compact</button>
+  <button id="popout" title="Small window under the webcam">⧉ Pop-out</button>
+  <span class="hint">Esc = search · Space = scroll · ↑↓ = speed · C = compact</span>
+</header>
+<div id="list"></div>
+<div id="stage"><p id="q"></p><div id="a"></div></div>
+
+<script>
+
+const list = document.getElementById('list'), qEl = document.getElementById('q'), aEl = document.getElementById('a'),
+      stage = document.getElementById('stage'), search = document.getElementById('search');
+let fs = 34, speed = 1, scrolling = false;
+
+function show(i) {
+  const it = QA[i];
+  qEl.textContent = it.q;
+  aEl.innerHTML = render(it.a);
+  stage.scrollTop = 0;
+  [...list.children].forEach((b, j) => b.classList.toggle('active', j === i));
+}
+
+// Prepared answers come from answers.md (see README).
+let QA = [];
+fetch('/answers').then(r => r.json()).then(items => {
+  QA = items;
+  QA.forEach((it, i) => { const b = document.createElement('button'); b.textContent = it.q; b.onclick = () => show(i); list.appendChild(b); });
+  if (QA.length) show(0);
+});
+
+function match(text) {
+  const words = text.toLowerCase().split(/\W+/).filter(w => w.length > 1);
+  if (!words.length) return;
+  let best = -1, bestScore = 0;
+  QA.forEach((it, i) => {
+    const hay = (it.k + ' ' + it.q).toLowerCase();
+    const s = words.reduce((n, w) => n + (hay.includes(w) ? 1 : 0), 0);
+    if (s > bestScore) { bestScore = s; best = i; }
+  });
+  if (best >= 0) show(best);
+}
+search.addEventListener('input', () => match(search.value));
+search.addEventListener('keydown', e => { if (e.key === 'Enter') { search.blur(); generate(search.value); } });
+
+const modelSel = document.getElementById('model');
+try { modelSel.value = localStorage.getItem('model') || 'sonnet'; } catch (e) {}
+modelSel.onchange = () => { try { localStorage.setItem('model', modelSel.value); } catch (e) {} };
+
+const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const render = txt => esc(txt).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+  .split('\n').filter(l => l.trim()).map(l => `<p>${l}</p>`).join('');
+let controller = null;
+function generate(question) {
+  question = question.trim();
+  if (question.split(/\s+/).length < 4) return;  // short text = keyword search only
+  ask({ q: question }, question);
+}
+
+// Cmd+V anywhere: a screenshot is sent as an image, text goes to the search field.
+document.addEventListener('paste', e => {
+  const item = [...e.clipboardData.items].find(i => i.type.startsWith('image/'));
+  if (!item) return;
+  e.preventDefault();
+  search.value = '';
+  search.blur();
+  const fr = new FileReader();
+  fr.onload = () => ask({ image: fr.result }, 'Reading screenshot…');
+  fr.readAsDataURL(item.getAsFile());
+});
+
+async function ask(payload, label) {
+  if (controller) controller.abort();
+  controller = new AbortController();
+  [...list.children].forEach(b => b.classList.remove('active'));
+  qEl.textContent = label;
+  aEl.innerHTML = '<p style="color:var(--muted)">Generating…</p>';
+  stage.scrollTop = 0;
+  try {
+    const res = await fetch('/ask', { method: 'POST', body: JSON.stringify({ ...payload, model: modelSel.value }), signal: controller.signal });
+    const reader = res.body.getReader(), dec = new TextDecoder();
+    let txt = '';
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      txt += dec.decode(value, { stream: true });
+      const m = txt.match(/^\s*Q:\s*(.*)\n/);  // screenshot answers start with the question it read
+      if (m) qEl.textContent = m[1];
+      aEl.innerHTML = render(m ? txt.slice(m[0].length) : txt.replace(/^\s*Q:.*$/, ''));
+    }
+  } catch (err) {
+    if (err.name !== 'AbortError') aEl.innerHTML = '<p style="color:#f66">Server offline — run: python3 server.py</p>';
+  }
+}
+
+const setFs = d => { fs = Math.max(18, fs + d); document.documentElement.style.setProperty('--fs', fs + 'px'); };
+document.getElementById('bigger').onclick = () => setFs(3);
+document.getElementById('smaller').onclick = () => setFs(-3);
+const scrollBtn = document.getElementById('scroll');
+const toggleScroll = () => { scrolling = !scrolling; scrollBtn.classList.toggle('on', scrolling); scrollBtn.textContent = scrolling ? '❚❚ Pause' : '▶ Scroll'; };
+scrollBtn.onclick = toggleScroll;
+document.getElementById('faster').onclick = () => speed = Math.min(4, speed + 0.25);
+document.getElementById('slower').onclick = () => speed = Math.max(0.25, speed - 0.25);
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { search.value = ''; search.focus(); return; }
+  if (document.activeElement === search) return;
+  if (e.key === ' ') { e.preventDefault(); toggleScroll(); }
+  if (e.key === 'ArrowUp') { e.preventDefault(); speed = Math.min(4, speed + 0.25); }
+  if (e.key === 'ArrowDown') { e.preventDefault(); speed = Math.max(0.25, speed - 0.25); }
+  if ((e.key === 'c' || e.key === 'C') && !e.metaKey && !e.ctrlKey) toggleCompact();
+});
+
+const compactBtn = document.getElementById('compactBtn');
+function toggleCompact(on = !document.body.classList.contains('compact')) {
+  document.body.classList.toggle('compact', on);
+  compactBtn.classList.toggle('on', on);
+  try { localStorage.setItem('compact', on ? '1' : ''); } catch (e) {}
+}
+compactBtn.onclick = () => toggleCompact();
+let startCompact = new URLSearchParams(location.search).has('compact');
+try { startCompact = startCompact || localStorage.getItem('compact') === '1'; } catch (e) {}
+toggleCompact(startCompact);
+
+// Small window centered at the top of the screen, right under the webcam.
+document.getElementById('popout').onclick = () => {
+  const w = 560, h = 260;
+  const left = (screen.availLeft || 0) + (screen.availWidth - w) / 2, top = screen.availTop || 0;
+  window.open(location.pathname + '?compact=1', 'teleprompter', `popup,width=${w},height=${h},left=${left},top=${top}`);
+};
+let acc = 0;
+(function tick() { if (scrolling) { acc += speed * 0.6; if (acc >= 1) { stage.scrollTop += Math.floor(acc); acc %= 1; } } requestAnimationFrame(tick); })();
+</script>
+</body>
+</html>
