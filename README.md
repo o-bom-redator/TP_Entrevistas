@@ -1,84 +1,81 @@
-# AI Teleprompter
+# TP Entrevistas
 
-A small local teleprompter that writes what you're going to say, live. Paste a question (or a screenshot of it) and a spoken answer, based on your own profile, scrolls on screen in a couple of seconds.
+Teleprompter local para entrevistas, em inglês ou português. Funciona de dois jeitos:
 
-It's made for people speaking in a second language who know their subject but want support to avoid freezing or rambling: practicing for interviews, recording videos, presentations, and Q&A sessions.
+- **✨ Gerar respostas com IA.** Você diz a sua área ou cola a descrição da vaga, e a IA prepara cards com as perguntas mais prováveis. Durante a entrevista, você cola a pergunta ou um print dela, e a resposta aparece na tela em cerca de 3 segundos.
+- **📄 Usar o seu texto pronto.** Você cola o texto ou anexa um `.docx`, `.txt` ou `.md`, e ele vira o roteiro na tela. Títulos dividem o texto em vários cards.
 
-- **Runs on your Claude subscription.** It calls the [Claude Code](https://claude.com/claude-code) CLI, so a Claude Pro/Max plan is enough. No API key, no per-token cost.
-- **Paste a screenshot.** Press Cmd+V with an image of the question and it reads the text and answers it, even when the page doesn't let you copy.
-- **Answers sound like a person talking.** Short sentences at your language level, only facts from your profile, and a filter against the usual AI tells ("not just X, but Y", buzzwords, em dashes).
-- **Camera-friendly compact mode.** A narrow column right under the webcam with a fixed reading zone and auto-scroll, so your eyes barely move.
-- **Prepared answers.** Write answers in advance and pull them up by typing one or two words.
+Foi pensado para quem conhece o assunto, mas quer apoio para não travar nem enrolar, principalmente numa segunda língua.
 
-No dependencies: one Python file using only the standard library, plus one HTML page.
+*English: a local AI teleprompter for job interviews in English or Portuguese. Generate answer cards from your resume and the job description, get live answers from a pasted question or screenshot, or load your own script (.docx/.txt/.md). Runs on your Claude subscription through Claude Code.*
 
-## Requirements
+## Destaques
 
-- macOS (the `start.sh` window helper is macOS-only; the server runs anywhere Python and Claude Code run)
-- Python 3.9+
-- [Claude Code](https://claude.com/claude-code) installed and logged in with your Claude account (`claude auth login`)
-- Google Chrome (optional, for the borderless window)
+- **Usa a sua assinatura do Claude.** O servidor chama o [Claude Code](https://claude.com/claude-code), então o plano Pro ou Max basta. Não precisa de chave de API e não há custo por uso.
+- **Lê um print da pergunta.** Aperte Cmd+V com a imagem e ele lê a pergunta, mesmo quando a plataforma não deixa copiar o texto.
+- **Respostas com cara de gente falando.** As frases têm o tamanho do seu nível de idioma e usam só fatos que você informou. Um filtro barra os vícios de IA ("não só X, mas Y", jargões, travessões).
+- **Modo compacto para a câmera.** O texto fica numa coluna estreita logo abaixo da webcam, com rolagem automática, para os olhos quase não se mexerem.
+- **Sem dependências.** É um arquivo Python que só usa a biblioteca padrão, mais uma página HTML.
 
-## Setup
+## Requisitos
 
-```bash
-git clone https://github.com/<your-user>/ai-teleprompter.git
-cd ai-teleprompter
-cp profile.example.md profile.md
-cp answers.example.md answers.md   # optional
-```
+- macOS. O `start.sh`, que abre a janela no topo da tela, só funciona no macOS. O servidor roda em qualquer sistema com Python e Claude Code.
+- Python 3.9 ou mais novo.
+- [Claude Code](https://claude.com/claude-code) instalado e com login na sua conta (`claude auth login`).
+- Google Chrome (opcional, para a janela sem barra de endereço).
 
-Edit **`profile.md`**: who you are (paste your resume with real numbers), what the situation is (for example, the job description), and the answer settings (language, your level, length). The model only uses facts written there.
-
-Edit **`answers.md`** (optional): prepared answers in this format:
-
-```markdown
-## Tell me about yourself
-keywords: about yourself introduce background
-
-Your answer. One idea per line, **key words** in bold.
-```
-
-Both files are in `.gitignore`, so your personal data never gets committed. Changes apply on the next question, with no restart needed.
-
-## Use
+## Como usar
 
 ```bash
+git clone https://github.com/o-bom-redator/TP_Entrevistas.git
+cd TP_Entrevistas
 ./start.sh
 ```
 
-This starts the server and opens a small window centered at the top of the screen. You can also run `python3 server.py` and open http://localhost:8765.
+O `start.sh` liga o servidor e abre a janela. Outra opção é rodar `python3 server.py` e abrir http://localhost:8765.
 
-| Action | How |
+Na primeira vez, aparece a tela de configuração:
+
+1. Escolha o **idioma das respostas** (inglês ou português), o seu **nível de inglês** e a **duração** de cada resposta.
+2. Escolha o caminho:
+   - **Gerar respostas com IA:** em "Sobre você", cole o currículo ou anexe o arquivo; em "Vaga ou área", cole a vaga ou só escreva a área. Depois clique em **Gerar cards e começar**, ou em **Começar sem cards** para usar só as respostas ao vivo.
+   - **Usar meu texto pronto:** cole o texto ou anexe o arquivo. Linhas `## Título` ou títulos do Word dividem o texto em cards.
+3. Para mudar alguma coisa depois, clique em **⚙**.
+
+Tudo o que você configura fica salvo na pasta `data/`, que não vai para o Git. Seus dados ficam só no seu computador e no Claude.
+
+## Atalhos
+
+| Ação | Como |
 |---|---|
-| Answer from a screenshot | Cmd+Ctrl+Shift+4 (copies the area to the clipboard), click the teleprompter, Cmd+V |
-| Answer from text | Paste the question in the field and press Enter |
-| Prepared answer | Type 1–2 words from the question |
-| Auto-scroll on/off | Space |
-| Scroll speed | ↑ / ↓ |
-| Font size | A− / A+ |
-| Compact mode | C |
-| Back to the field | Esc |
+| Resposta a partir de um print | Cmd+Ctrl+Shift+4 (copia a área selecionada), clique no teleprompter e aperte Cmd+V |
+| Resposta a partir de texto | Cole a pergunta no campo e aperte Enter |
+| Abrir um card pronto | Digite 1 ou 2 palavras da pergunta |
+| Ligar/desligar a rolagem | Espaço |
+| Velocidade da rolagem | ↑ / ↓ |
+| Tamanho da fonte | A− / A+ |
+| Modo compacto | C |
+| Voltar ao campo de busca | Esc |
 
-The model picker switches between **Sonnet** (default, better at sticking to your facts) and **Haiku** (a bit faster). The text usually starts appearing in about 3 seconds.
+O seletor de modelo alterna entre o **Sonnet** (padrão, segue melhor os seus fatos) e o **Haiku** (um pouco mais rápido).
 
-## Tips for looking at the camera
+## Dicas para olhar para a câmera
 
-- Keep the window as close to the webcam as possible: `./start.sh 600 220` sets width and height. Hiding the macOS menu bar gains about 3 cm.
-- Sit a bit farther back and increase the font. The farther you sit, the smaller your eye movement looks on camera.
-- Use auto-scroll so the line you're reading stays in the same spot.
-- Use the text as a guide: read a sentence, look at the camera, say it.
+- Deixe a janela o mais perto possível da webcam. `./start.sh 600 220` define a largura e a altura. Ocultar a barra de menus do macOS faz a janela subir uns 3 cm.
+- Sente um pouco mais longe e aumente a fonte. Quanto mais longe, menos o movimento dos olhos aparece.
+- Use a rolagem automática, para a linha que você lê ficar sempre no mesmo lugar.
+- Use o texto como guia: leia uma frase, olhe para a câmera e fale.
 
-## Responsible use
+## Uso responsável
 
-Use it for practice, rehearsal and situations where reading notes is fine. Many interview and exam platforms forbid scripted or AI-assisted answers, so check the rules before using it in a real assessment. Always check every generated fact before you say it.
+Use para treinar, ensaiar e em situações em que consultar anotações é permitido. Muitas plataformas de entrevista e de avaliação proíbem respostas com roteiro ou com IA, então confira as regras antes. E confira cada fato gerado antes de falar.
 
-## Troubleshooting
+## Problemas comuns
 
-- **`[ERROR] … OAuth access token has expired`**: run `claude auth login`.
-- **Slow first answer**: the server already skips your MCP servers, hooks and plugins. If it's still slow, run `claude -p hi` once in a terminal to warm up the login.
-- **Window doesn't open in the right place**: Chrome ignores size flags if it reuses a running window. `start.sh` uses a separate profile (`~/.ai-teleprompter-chrome`) to avoid that.
+- **`[ERROR] … OAuth access token has expired`**: rode `claude auth login`.
+- **Primeira resposta lenta**: o servidor já ignora os seus servidores MCP, hooks e plugins. Se continuar lento, rode `claude -p oi` uma vez no terminal.
+- **A janela não abre no lugar certo**: o `start.sh` usa um perfil separado do Chrome (`~/.ai-teleprompter-chrome`) para que o tamanho e a posição sejam respeitados.
 
-## License
+## Licença
 
 MIT

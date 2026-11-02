@@ -1,19 +1,20 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AI Teleprompter</title>
+<title>TP Entrevistas</title>
 <style>
   :root { --bg:#111; --panel:#1b1b1b; --text:#f2f2f2; --muted:#888; --accent:#ffd54a; --line:#2c2c2c; }
   * { box-sizing:border-box; }
   body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-system,system-ui,sans-serif; height:100vh; display:flex; flex-direction:column; }
   header { display:flex; gap:8px; padding:10px 14px; border-bottom:1px solid var(--line); align-items:center; flex-wrap:wrap; }
   #search { flex:1; min-width:180px; font-size:18px; padding:10px 12px; border-radius:8px; border:1px solid var(--line); background:var(--panel); color:var(--text); }
-  select { font-size:15px; padding:9px; border-radius:8px; border:1px solid var(--line); background:var(--panel); color:var(--text); }
+  select, textarea { font-size:15px; padding:9px; border-radius:8px; border:1px solid var(--line); background:var(--panel); color:var(--text); font-family:inherit; }
   button { font-size:15px; padding:9px 12px; border-radius:8px; border:1px solid var(--line); background:var(--panel); color:var(--text); cursor:pointer; }
-  button.on { background:var(--accent); color:#111; }
+  button.on, button.primary { background:var(--accent); color:#111; border-color:var(--accent); }
   #list { display:flex; gap:6px; padding:8px 14px; overflow-x:auto; border-bottom:1px solid var(--line); }
+  #list:empty { display:none; }
   #list button { white-space:nowrap; font-size:13px; }
   #list button.active { border-color:var(--accent); color:var(--accent); }
   #stage { flex:1; overflow-y:auto; padding:24px 6vw 60vh; scroll-behavior:auto; }
@@ -36,28 +37,118 @@
   body.compact #a p:first-child { margin-top:0; }
   body.compact #a { line-height:1.3; }
   body.compact #a p { max-width:15em; margin:0 auto .55em; text-align:center; }
+
+  /* Setup screen */
+  #setup { position:fixed; inset:0; z-index:5; background:var(--bg); overflow-y:auto; padding:32px 16px 48px; }
+  #setup[hidden] { display:none; }
+  .wrap { max-width:760px; margin:0 auto; display:flex; flex-direction:column; gap:18px; }
+  .wrap h1 { margin:0; font-size:28px; }
+  .wrap .label-row + p { margin:-10px 0 0; color:var(--muted); }
+  .row { display:flex; gap:14px; flex-wrap:wrap; }
+  label.field { display:flex; flex-direction:column; gap:6px; font-size:14px; color:var(--muted); }
+  label.field.grow { flex:1; }
+  .modes { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  @media (max-width:560px) { .modes { grid-template-columns:1fr; } }
+  .mode { text-align:left; padding:16px; border-radius:12px; display:flex; flex-direction:column; gap:6px; }
+  .mode b { font-size:17px; }
+  .mode span { font-size:13px; color:var(--muted); }
+  .mode.on { background:#2a2615; color:var(--text); border-color:var(--accent); }
+  .panel { display:flex; flex-direction:column; gap:14px; }
+  .panel[hidden] { display:none; }
+  .panel textarea { width:100%; min-height:120px; resize:vertical; font-size:14px; line-height:1.45; }
+  .label-row { display:flex; justify-content:space-between; align-items:center; font-size:14px; color:var(--muted); }
+  .attach { font-size:13px; padding:5px 10px; }
+  .actions { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  #status { color:var(--muted); font-size:13px; }
 </style>
 </head>
 <body>
 <header>
-  <input id="search" placeholder="Cmd+V a screenshot · or paste question + Enter · or 1-2 words = ready answer" autofocus>
-  <select id="model" title="Model"><option value="sonnet">Sonnet (better)</option><option value="haiku">Haiku (fast)</option></select>
+  <input id="search" placeholder="Cmd+V num print · ou cole a pergunta + Enter · ou 1-2 palavras = card pronto" autofocus>
+  <select id="model" title="Modelo"><option value="sonnet">Sonnet (melhor)</option><option value="haiku">Haiku (rápido)</option></select>
   <button id="smaller">A−</button><button id="bigger">A+</button>
-  <button id="scroll">▶ Scroll</button>
+  <button id="scroll">▶ Rolar</button>
   <button id="slower">−</button><button id="faster">+</button>
-  <button id="compactBtn" title="Compact mode (C)">▭ Compact</button>
-  <button id="popout" title="Small window under the webcam">⧉ Pop-out</button>
-  <span class="hint">Esc = search · Space = scroll · ↑↓ = speed · C = compact</span>
+  <button id="compactBtn" title="Modo compacto (C)">▭ Compacto</button>
+  <button id="popout" title="Janela pequena embaixo da webcam">⧉ Janela</button>
+  <button id="setupBtn" title="Configurar">⚙</button>
+  <span class="hint">Esc = busca · Espaço = rolar · ↑↓ = velocidade · C = compacto</span>
 </header>
 <div id="list"></div>
 <div id="stage"><p id="q"></p><div id="a"></div></div>
 
-<script>
+<div id="setup" hidden>
+  <div class="wrap">
+    <div class="label-row"><h1 style="color:var(--text)">TP Entrevistas</h1>
+      <button id="closeSetup" style="font-size:13px; padding:5px 10px" hidden>✕ Voltar ao teleprompter</button></div>
+    <p>Teleprompter para entrevistas: respostas geradas com IA a partir do seu perfil, ou o seu próprio texto.</p>
 
-const list = document.getElementById('list'), qEl = document.getElementById('q'), aEl = document.getElementById('a'),
-      stage = document.getElementById('stage'), search = document.getElementById('search');
+    <div class="row">
+      <label class="field">Idioma das respostas
+        <select id="language"><option value="en">Inglês</option><option value="pt">Português</option></select>
+      </label>
+      <label class="field" id="levelField">Seu nível de inglês
+        <select id="level"><option>B1</option><option>B2</option><option>C1</option><option value="C2">Fluente</option></select>
+      </label>
+      <label class="field">Duração de cada resposta
+        <select id="minutes"><option value="1">1 min</option><option value="2">2 min</option><option value="3">3 min</option></select>
+      </label>
+    </div>
+
+    <div class="modes">
+      <button class="mode" data-mode="generate"><b>✨ Gerar respostas com IA</b><span>Diga sua área ou cole a vaga. A IA prepara cards com as perguntas mais prováveis e responde novas perguntas ao vivo.</span></button>
+      <button class="mode" data-mode="script"><b>📄 Usar meu texto pronto</b><span>Cole ou anexe (.docx, .txt, .md) o texto que você vai ler.</span></button>
+    </div>
+
+    <div class="panel" data-panel="generate" hidden>
+      <div>
+        <div class="label-row">Sobre você (cole o currículo ou anexe; quanto mais números e resultados, melhor)
+          <button class="attach" data-target="background">📎 Anexar</button></div>
+        <textarea id="background" placeholder="Ex.: Maria Silva, analista de marketing, 5 anos. Na Empresa X aumentei os leads em 40%…"></textarea>
+      </div>
+      <div>
+        <div class="label-row">Vaga ou área (cole a descrição da vaga ou só escreva a área)
+          <button class="attach" data-target="target">📎 Anexar</button></div>
+        <textarea id="target" placeholder="Ex.: Analista de Dados Pleno no Banco Y… ou apenas: vendas B2B"></textarea>
+      </div>
+      <div class="actions">
+        <button class="primary" id="genCards">Gerar cards e começar</button>
+        <select id="count" title="Quantos cards"><option value="5">5 cards</option><option value="8" selected>8 cards</option><option value="12">12 cards</option></select>
+        <button id="startLive">Começar sem cards (só ao vivo)</button>
+      </div>
+    </div>
+
+    <div class="panel" data-panel="script" hidden>
+      <div>
+        <div class="label-row">Seu texto (linhas com "## Título" dividem em vários cards; títulos do .docx também)
+          <button class="attach" data-target="script">📎 Anexar</button></div>
+        <textarea id="script" style="min-height:260px" placeholder="## Fale sobre você&#10;&#10;Meu nome é…&#10;&#10;## Por que esta vaga?&#10;&#10;Porque…"></textarea>
+      </div>
+      <div class="actions"><button class="primary" id="startScript">Começar</button></div>
+    </div>
+
+    <div id="status"></div>
+  </div>
+</div>
+<input type="file" id="file" accept=".docx,.txt,.md" hidden>
+
+<script>
+const $ = id => document.getElementById(id);
+const list = $('list'), qEl = $('q'), aEl = $('a'), stage = $('stage'), search = $('search');
 let fs = 34, speed = 1, scrolling = false;
 
+const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const render = txt => esc(txt).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/^#+\s*/gm, '')
+  .split('\n').filter(l => l.trim() && !/^\s*-{3,}\s*$/.test(l)).map(l => `<p>${l}</p>`).join('');
+const post = (url, body) => fetch(url, { method: 'POST', body: JSON.stringify(body) });
+
+// ---- Cards -------------------------------------------------------------------
+let QA = [];
+function setCards(items) {
+  QA = items;
+  list.innerHTML = '';
+  QA.forEach((it, i) => { const b = document.createElement('button'); b.textContent = it.q; b.onclick = () => show(i); list.appendChild(b); });
+}
 function show(i) {
   const it = QA[i];
   qEl.textContent = it.q;
@@ -65,17 +156,21 @@ function show(i) {
   stage.scrollTop = 0;
   [...list.children].forEach((b, j) => b.classList.toggle('active', j === i));
 }
-
-// Prepared answers come from answers.md (see README).
-let QA = [];
-fetch('/answers').then(r => r.json()).then(items => {
-  QA = items;
-  QA.forEach((it, i) => { const b = document.createElement('button'); b.textContent = it.q; b.onclick = () => show(i); list.appendChild(b); });
+async function loadCards() {
+  setCards(await (await fetch('/cards')).json());
   if (QA.length) show(0);
+  else { qEl.textContent = ''; aEl.innerHTML = '<p style="color:var(--muted)">Cole um print (Cmd+V) ou digite a pergunta e aperte Enter.</p>'; }
+}
+// Same format as the server: "## Question", optional "keywords:" line, then the answer.
+const parseCards = text => text.split(/^## /m).slice(1).map(block => {
+  let [q, ...rest] = block.split('\n'), body = rest.join('\n'), k = '';
+  const m = body.match(/^\s*keywords:(.*)\n/);
+  if (m) { k = m[1].trim(); body = body.slice(m[0].length); }
+  return { q: q.trim(), k, a: body.trim() };
 });
 
 function match(text) {
-  const words = text.toLowerCase().split(/\W+/).filter(w => w.length > 1);
+  const words = text.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(w => w.length > 1);
   if (!words.length) return;
   let best = -1, bestScore = 0;
   QA.forEach((it, i) => {
@@ -88,13 +183,11 @@ function match(text) {
 search.addEventListener('input', () => match(search.value));
 search.addEventListener('keydown', e => { if (e.key === 'Enter') { search.blur(); generate(search.value); } });
 
-const modelSel = document.getElementById('model');
+// ---- Live answers ------------------------------------------------------------
+const modelSel = $('model');
 try { modelSel.value = localStorage.getItem('model') || 'sonnet'; } catch (e) {}
 modelSel.onchange = () => { try { localStorage.setItem('model', modelSel.value); } catch (e) {} };
 
-const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-const render = txt => esc(txt).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
-  .split('\n').filter(l => l.trim()).map(l => `<p>${l}</p>`).join('');
 let controller = null;
 function generate(question) {
   question = question.trim();
@@ -104,49 +197,141 @@ function generate(question) {
 
 // Cmd+V anywhere: a screenshot is sent as an image, text goes to the search field.
 document.addEventListener('paste', e => {
+  if (!$('setup').hidden) return;
   const item = [...e.clipboardData.items].find(i => i.type.startsWith('image/'));
   if (!item) return;
   e.preventDefault();
   search.value = '';
   search.blur();
   const fr = new FileReader();
-  fr.onload = () => ask({ image: fr.result }, 'Reading screenshot…');
+  fr.onload = () => ask({ image: fr.result }, 'Lendo o print…');
   fr.readAsDataURL(item.getAsFile());
 });
 
-async function ask(payload, label) {
+async function stream(url, payload, onText) {
   if (controller) controller.abort();
   controller = new AbortController();
-  [...list.children].forEach(b => b.classList.remove('active'));
-  qEl.textContent = label;
-  aEl.innerHTML = '<p style="color:var(--muted)">Generating…</p>';
-  stage.scrollTop = 0;
-  try {
-    const res = await fetch('/ask', { method: 'POST', body: JSON.stringify({ ...payload, model: modelSel.value }), signal: controller.signal });
-    const reader = res.body.getReader(), dec = new TextDecoder();
-    let txt = '';
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      txt += dec.decode(value, { stream: true });
-      const m = txt.match(/^\s*Q:\s*(.*)\n/);  // screenshot answers start with the question it read
-      if (m) qEl.textContent = m[1];
-      aEl.innerHTML = render(m ? txt.slice(m[0].length) : txt.replace(/^\s*Q:.*$/, ''));
-    }
-  } catch (err) {
-    if (err.name !== 'AbortError') aEl.innerHTML = '<p style="color:#f66">Server offline — run: python3 server.py</p>';
+  const res = await fetch(url, { method: 'POST', body: JSON.stringify({ ...payload, model: modelSel.value }), signal: controller.signal });
+  const reader = res.body.getReader(), dec = new TextDecoder();
+  let txt = '';
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) return txt;
+    txt += dec.decode(value, { stream: true });
+    onText(txt);
   }
 }
 
+async function ask(payload, label) {
+  [...list.children].forEach(b => b.classList.remove('active'));
+  qEl.textContent = label;
+  aEl.innerHTML = '<p style="color:var(--muted)">Gerando…</p>';
+  stage.scrollTop = 0;
+  try {
+    await stream('/ask', payload, txt => {
+      const m = txt.match(/^\s*Q:\s*(.*)\n/);  // screenshot answers start with the question it read
+      if (m) qEl.textContent = m[1];
+      aEl.innerHTML = render(m ? txt.slice(m[0].length) : txt.replace(/^\s*Q:.*$/, ''));
+    });
+  } catch (err) {
+    if (err.name !== 'AbortError') aEl.innerHTML = '<p style="color:#f66">Servidor desligado. Rode: python3 server.py</p>';
+  }
+}
+
+// ---- Setup screen ------------------------------------------------------------
+let mode = '';
+function pickMode(m) {
+  mode = m;
+  document.querySelectorAll('.mode').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
+  document.querySelectorAll('.panel').forEach(p => p.hidden = p.dataset.panel !== m);
+}
+document.querySelectorAll('.mode').forEach(b => b.onclick = () => pickMode(b.dataset.mode));
+$('language').onchange = () => $('levelField').hidden = $('language').value === 'pt';
+
+function readForm(extra = {}) {
+  return { mode, language: $('language').value, level: $('level').value, minutes: +$('minutes').value,
+           background: $('background').value, target: $('target').value, ...extra };
+}
+async function openSetup() {
+  const s = await (await fetch('/settings')).json();
+  $('language').value = s.language; $('level').value = s.level; $('minutes').value = String(s.minutes);
+  $('background').value = s.background; $('target').value = s.target;
+  $('levelField').hidden = s.language === 'pt';
+  pickMode(s.mode || '');
+  $('closeSetup').hidden = !s.mode;
+  $('status').textContent = '';
+  $('setup').hidden = false;
+}
+const closeSetup = () => { $('setup').hidden = true; search.focus(); };
+$('setupBtn').onclick = openSetup;
+$('closeSetup').onclick = closeSetup;
+
+$('startLive').onclick = async () => {
+  await post('/settings', readForm());
+  closeSetup();
+  loadCards();
+};
+$('startScript').onclick = async () => {
+  if (!$('script').value.trim()) { $('status').textContent = 'Cole ou anexe o seu texto primeiro.'; return; }
+  await post('/settings', readForm());
+  await post('/script', { text: $('script').value });
+  closeSetup();
+  loadCards();
+};
+$('genCards').onclick = async () => {
+  if (!$('background').value.trim() && !$('target').value.trim()) {
+    $('status').textContent = 'Preencha pelo menos a área ou a vaga.'; return;
+  }
+  await post('/settings', readForm());
+  closeSetup();
+  setCards([]);
+  const n = $('count').value;
+  qEl.textContent = `Gerando ${n} cards…`;
+  aEl.innerHTML = '<p style="color:var(--muted)">Gerando…</p>';
+  try {
+    await stream('/generate-cards', { count: n }, txt => {
+      const cards = parseCards(txt);
+      if (cards.length !== QA.length) setCards(cards);
+      if (!cards.length) return;
+      QA[cards.length - 1] = cards[cards.length - 1];
+      qEl.textContent = `Card ${cards.length} de ${n}: ${cards[cards.length - 1].q}`;
+      aEl.innerHTML = render(cards[cards.length - 1].a);
+    });
+    await loadCards();
+  } catch (err) {
+    if (err.name !== 'AbortError') aEl.innerHTML = '<p style="color:#f66">Servidor desligado. Rode: python3 server.py</p>';
+  }
+};
+
+// Attach .docx / .txt / .md: the server extracts the text into the textarea.
+let attachTarget = null;
+document.querySelectorAll('.attach').forEach(b => b.onclick = () => { attachTarget = b.dataset.target; $('file').click(); });
+$('file').onchange = () => {
+  const f = $('file').files[0];
+  if (!f) return;
+  $('status').textContent = `Lendo ${f.name}…`;
+  const fr = new FileReader();
+  fr.onload = async () => {
+    const { text } = await (await post('/extract', { name: f.name, data: fr.result })).json();
+    const box = $(attachTarget);
+    box.value = (box.value.trim() ? box.value.trim() + '\n\n' : '') + text;
+    $('status').textContent = `${f.name} anexado.`;
+    $('file').value = '';
+  };
+  fr.readAsDataURL(f);
+};
+
+// ---- Teleprompter controls ---------------------------------------------------
 const setFs = d => { fs = Math.max(18, fs + d); document.documentElement.style.setProperty('--fs', fs + 'px'); };
-document.getElementById('bigger').onclick = () => setFs(3);
-document.getElementById('smaller').onclick = () => setFs(-3);
-const scrollBtn = document.getElementById('scroll');
-const toggleScroll = () => { scrolling = !scrolling; scrollBtn.classList.toggle('on', scrolling); scrollBtn.textContent = scrolling ? '❚❚ Pause' : '▶ Scroll'; };
+$('bigger').onclick = () => setFs(3);
+$('smaller').onclick = () => setFs(-3);
+const scrollBtn = $('scroll');
+const toggleScroll = () => { scrolling = !scrolling; scrollBtn.classList.toggle('on', scrolling); scrollBtn.textContent = scrolling ? '❚❚ Pausar' : '▶ Rolar'; };
 scrollBtn.onclick = toggleScroll;
-document.getElementById('faster').onclick = () => speed = Math.min(4, speed + 0.25);
-document.getElementById('slower').onclick = () => speed = Math.max(0.25, speed - 0.25);
+$('faster').onclick = () => speed = Math.min(4, speed + 0.25);
+$('slower').onclick = () => speed = Math.max(0.25, speed - 0.25);
 document.addEventListener('keydown', e => {
+  if (!$('setup').hidden) return;
   if (e.key === 'Escape') { search.value = ''; search.focus(); return; }
   if (document.activeElement === search) return;
   if (e.key === ' ') { e.preventDefault(); toggleScroll(); }
@@ -155,7 +340,7 @@ document.addEventListener('keydown', e => {
   if ((e.key === 'c' || e.key === 'C') && !e.metaKey && !e.ctrlKey) toggleCompact();
 });
 
-const compactBtn = document.getElementById('compactBtn');
+const compactBtn = $('compactBtn');
 function toggleCompact(on = !document.body.classList.contains('compact')) {
   document.body.classList.toggle('compact', on);
   compactBtn.classList.toggle('on', on);
@@ -167,13 +352,16 @@ try { startCompact = startCompact || localStorage.getItem('compact') === '1'; } 
 toggleCompact(startCompact);
 
 // Small window centered at the top of the screen, right under the webcam.
-document.getElementById('popout').onclick = () => {
+$('popout').onclick = () => {
   const w = 560, h = 260;
   const left = (screen.availLeft || 0) + (screen.availWidth - w) / 2, top = screen.availTop || 0;
   window.open(location.pathname + '?compact=1', 'teleprompter', `popup,width=${w},height=${h},left=${left},top=${top}`);
 };
 let acc = 0;
 (function tick() { if (scrolling) { acc += speed * 0.6; if (acc >= 1) { stage.scrollTop += Math.floor(acc); acc %= 1; } } requestAnimationFrame(tick); })();
+
+// First run: show the setup screen.
+fetch('/settings').then(r => r.json()).then(s => s.mode ? loadCards() : openSetup());
 </script>
 </body>
 </html>
